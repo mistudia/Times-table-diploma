@@ -83,6 +83,35 @@ border-color:#ffd54f;
 background:#1565c0;
 }
 
+.modus-btn{
+background:#1976d2;
+color:white;
+border:3px solid transparent;
+border-radius:10px;
+padding:10px 20px;
+font-size:16px;
+font-weight:bold;
+cursor:pointer;
+transition:.2s;
+box-shadow:0 4px 10px rgba(0,0,0,.18);
+}
+
+.modus-btn:hover{
+transform:translateY(-2px);
+box-shadow:0 8px 18px rgba(0,0,0,.25);
+}
+
+.modus-btn.active{
+border-color:#ffd54f;
+background:#1565c0;
+}
+
+.modus-symbol{
+color:#ffd54f;
+font-size:20px;
+font-weight:900;
+}
+
 main{
 background:white;
 margin-top:25px;
@@ -173,7 +202,7 @@ height:10px;
 background:#e3ecfb;
 border-radius:6px;
 overflow:hidden;
-margin-bottom:26px;
+margin-bottom:10px;
 }
 
 #progressFill{
@@ -181,6 +210,26 @@ height:100%;
 width:0%;
 background:#1976d2;
 transition:width .3s;
+}
+
+.fragenZeitBar{
+width:100%;
+height:10px;
+background:#e3ecfb;
+border-radius:6px;
+overflow:hidden;
+margin-bottom:26px;
+}
+
+#fragenZeitFill{
+height:100%;
+width:100%;
+background:#1976d2;
+transition:width 1s linear, background .3s;
+}
+
+#fragenZeitFill.warnung{
+background:#c62828;
 }
 
 #ergebnisMsg{
@@ -223,6 +272,41 @@ background:white;
 #aktuelleEingabe:focus{
 border-color:#1976d2;
 box-shadow:0 0 10px rgba(25,118,210,.35);
+}
+
+#loesungAnzeige{
+margin-top:14px;
+font-size:20px;
+font-weight:bold;
+color:#c62828;
+min-height:28px;
+}
+
+#wiederholungBereich{
+margin:20px 0;
+padding:18px;
+background:#fff8e1;
+border-radius:14px;
+border:2px solid #ffe082;
+text-align:left;
+}
+
+#wiederholungTitel{
+margin:0 0 12px 0;
+color:#e65100;
+text-align:center;
+}
+
+.wiederholungAufgabe{
+display:inline-block;
+background:white;
+border-radius:8px;
+padding:8px 14px;
+margin:5px;
+font-size:17px;
+font-weight:bold;
+color:#1565c0;
+box-shadow:0 2px 6px rgba(0,0,0,.12);
 }
 
 .toolbar-aktionen{
@@ -569,11 +653,18 @@ pointer-events:none;
 <button id="btnZh" class="lang-btn" onclick="sprache('zh')">🇨🇳</button>
 </div>
 
+<div class="toolbar">
+<button id="btnModusMal" class="modus-btn active" onclick="modus('mal')"><span class="modus-symbol">×</span> <span id="modusMalLabel">Malnehmen</span></button>
+<button id="btnModusGeteilt" class="modus-btn" onclick="modus('geteilt')"><span class="modus-symbol">÷</span> <span id="modusGeteiltLabel">Geteilt</span></button>
+<button id="btnModusPlus" class="modus-btn" onclick="modus('plus')"><span class="modus-symbol">+</span> <span id="modusPlusLabel">Plus</span></button>
+<button id="btnModusMinus" class="modus-btn" onclick="modus('minus')"><span class="modus-symbol">−</span> <span id="modusMinusLabel">Minus</span></button>
+</div>
+
 </header>
 
 <main>
 
-<p id="anleitung">Löse alle 40 Aufgaben aus den Einmaleinsreihen 1 bis 10 fehlerfrei in 8 Minuten, um dein Diplom zu bekommen!</p>
+<p id="anleitung">Löse alle 45 Aufgaben aus den Einmaleinsreihen 2 bis 10 fehlerfrei in 7 Minuten, um dein Diplom zu bekommen!</p>
 
 <div class="statusZeile">
 <span id="aufgabeLabel"></span>
@@ -581,12 +672,19 @@ pointer-events:none;
 </div>
 
 <div class="progressBar"><div id="progressFill"></div></div>
+<div class="fragenZeitBar"><div id="fragenZeitFill"></div></div>
 
 <div id="ergebnisMsg"></div>
+
+<div id="wiederholungBereich" style="display:none">
+    <h3 id="wiederholungTitel"></h3>
+    <div id="wiederholungListe"></div>
+</div>
 
 <div id="aufgabeBereich">
     <div class="aufgabeKarte" id="aufgabeKarte"></div>
     <input type="text" inputmode="numeric" id="aktuelleEingabe" autocomplete="off">
+    <div id="loesungAnzeige"></div>
 </div>
 
 <div class="toolbar toolbar-aktionen">
@@ -645,7 +743,7 @@ pointer-events:none;
 
                 <div class="diplomBadge badge-orange">
                     <div class="icon">🔢</div>
-                    <div class="wert" id="badgeReihen">1–10</div>
+                    <div class="wert" id="badgeReihen">2–10</div>
                     <div class="label" id="badgeReihenLabel">Einmaleinsreihen</div>
                 </div>
 
@@ -727,21 +825,35 @@ mistudia.com
 <script>
 document.getElementById("jahr").textContent = new Date().getFullYear();
 
-const GESAMTZEIT = 8 * 60;
+const GESAMTZEIT_NORMAL = 7 * 60;
+const GESAMTZEIT_PLUSMINUS = 15 * 60;
+const FRAGENZEIT = 7;
 
+let GESAMTZEIT = GESAMTZEIT_NORMAL;
 let aktivSprache = "de";
+let aktivModus = "mal";
 let aufgaben = [];
 let aktuellerIndex = 0;
 let richtigCount = 0;
+let falscheAufgaben = [];
 let timerSekunden = GESAMTZEIT;
 let timerInterval = null;
 let testAktiv = false;
+let fragenAblaufTimeout = null;
+let fragenWarnungTimeout = null;
 
 const texte = {
 
 de:{
 titel:"Einmaleins-Diplom",
-anleitung:"Löse alle 40 Aufgaben aus den Einmaleinsreihen 1 bis 10 fehlerfrei in 8 Minuten, um dein Diplom zu bekommen!",
+anleitungMal:"Löse alle 45 Aufgaben aus den Einmaleinsreihen 2 bis 10 fehlerfrei in 7 Minuten, um dein Diplom zu bekommen!",
+anleitungGeteilt:"Löse alle 45 Geteiltaufgaben aus den Reihen 2 bis 10 fehlerfrei in 7 Minuten, um dein Diplom zu bekommen!",
+anleitungPlus:"Löse alle 45 (schweren) Plusaufgaben mit Zehnerübergang im Zahlenraum bis 100 fehlerfrei in 15 Minuten, um dein Diplom zu bekommen!",
+anleitungMinus:"Löse alle 45 (schweren) Minusaufgaben mit Übertrag im Zahlenraum bis 100 fehlerfrei in 15 Minuten, um dein Diplom zu bekommen!",
+modusMalLabel:"Malnehmen",
+modusGeteiltLabel:"Geteilt",
+modusPlusLabel:"Plus",
+modusMinusLabel:"Minus",
 weiter:"Weiter ➜",
 neu:"🔄 Neu starten",
 aufgabeLabel:function(n,g){ return "Aufgabe "+n+" von "+g; },
@@ -758,6 +870,9 @@ namePlatzhalter:"Dein Name",
 badgePunkteLabel:"Punkte",
 badgeAufgabenLabel:"Aufgaben richtig",
 badgeReihenLabel:"Einmaleinsreihen",
+badgeZahlenraumLabel:"Zahlenraum",
+loesungLabel:"Richtige Lösung:",
+wiederholungTitel:"Diese Aufgaben hattest du falsch:",
 badgeZeitLabel:"Benötigte Zeit",
 badgeStatusLabel:"Ergebnis",
 badgeStatusWert:"Bestanden",
@@ -772,7 +887,14 @@ datumLabel:""
 
 en:{
 titel:"Times Tables Diploma",
-anleitung:"Solve all 40 tasks from the times tables 1 to 10 without mistakes in 8 minutes to earn your diploma!",
+anleitungMal:"Solve all 45 tasks from the times tables 2 to 10 without mistakes in 7 minutes to earn your diploma!",
+anleitungGeteilt:"Solve all 45 division tasks from the times tables 2 to 10 without mistakes in 7 minutes to earn your diploma!",
+anleitungPlus:"Solve all 45 (hard) addition tasks with carrying up to 100 without mistakes in 15 minutes to earn your diploma!",
+anleitungMinus:"Solve all 45 (hard) subtraction tasks with borrowing up to 100 without mistakes in 15 minutes to earn your diploma!",
+modusMalLabel:"Multiply",
+modusGeteiltLabel:"Divide",
+modusPlusLabel:"Add",
+modusMinusLabel:"Subtract",
 weiter:"Next ➜",
 neu:"🔄 Restart",
 aufgabeLabel:function(n,g){ return "Task "+n+" of "+g; },
@@ -789,6 +911,9 @@ namePlatzhalter:"Your name",
 badgePunkteLabel:"Points",
 badgeAufgabenLabel:"Tasks correct",
 badgeReihenLabel:"Times tables",
+badgeZahlenraumLabel:"Number range",
+loesungLabel:"Correct answer:",
+wiederholungTitel:"Tasks you got wrong:",
 badgeZeitLabel:"Time taken",
 badgeStatusLabel:"Result",
 badgeStatusWert:"Passed",
@@ -803,7 +928,14 @@ datumLabel:""
 
 es:{
 titel:"Diploma de las Tablas de Multiplicar",
-anleitung:"¡Resuelve las 40 tareas de las tablas del 1 al 10 sin errores en 8 minutos para obtener tu diploma!",
+anleitungMal:"¡Resuelve las 45 tareas de las tablas del 2 al 10 sin errores en 7 minutos para obtener tu diploma!",
+anleitungGeteilt:"¡Resuelve las 45 tareas de división de las tablas del 2 al 10 sin errores en 7 minutos para obtener tu diploma!",
+anleitungPlus:"¡Resuelve las 45 tareas (difíciles) de suma con acarreo hasta 100 sin errores en 15 minutos para obtener tu diploma!",
+anleitungMinus:"¡Resuelve las 45 tareas (difíciles) de resta con préstamo hasta 100 sin errores en 15 minutos para obtener tu diploma!",
+modusMalLabel:"Multiplicar",
+modusGeteiltLabel:"Dividir",
+modusPlusLabel:"Sumar",
+modusMinusLabel:"Restar",
 weiter:"Siguiente ➜",
 neu:"🔄 Reiniciar",
 aufgabeLabel:function(n,g){ return "Tarea "+n+" de "+g; },
@@ -820,6 +952,9 @@ namePlatzhalter:"Tu nombre",
 badgePunkteLabel:"Puntos",
 badgeAufgabenLabel:"Tareas correctas",
 badgeReihenLabel:"Tablas de multiplicar",
+badgeZahlenraumLabel:"Rango numérico",
+loesungLabel:"Respuesta correcta:",
+wiederholungTitel:"Tareas que tuviste mal:",
 badgeZeitLabel:"Tiempo empleado",
 badgeStatusLabel:"Resultado",
 badgeStatusWert:"Aprobado",
@@ -834,7 +969,14 @@ datumLabel:""
 
 zh:{
 titel:"乘法表证书",
-anleitung:"请在8分钟内正确解答1到10乘法表的全部40道题目，即可获得证书！",
+anleitungMal:"请在7分钟内正确解答2到10乘法表的全部45道题目，即可获得证书！",
+anleitungGeteilt:"请在7分钟内正确解答2到10除法表的全部45道题目，即可获得证书！",
+anleitungPlus:"请在15分钟内正确解答100以内需要进位的全部45道（较难）加法题目，即可获得证书！",
+anleitungMinus:"请在15分钟内正确解答100以内需要借位的全部45道（较难）减法题目，即可获得证书！",
+modusMalLabel:"乘法",
+modusGeteiltLabel:"除法",
+modusPlusLabel:"加法",
+modusMinusLabel:"减法",
 weiter:"下一题 ➜",
 neu:"🔄 重新开始",
 aufgabeLabel:function(n,g){ return "第 "+n+" / "+g+" 题"; },
@@ -851,6 +993,9 @@ namePlatzhalter:"你的名字",
 badgePunkteLabel:"积分",
 badgeAufgabenLabel:"正确题数",
 badgeReihenLabel:"乘法表范围",
+badgeZahlenraumLabel:"数字范围",
+loesungLabel:"正确答案：",
+wiederholungTitel:"你做错的题目：",
 badgeZeitLabel:"所用时间",
 badgeStatusLabel:"结果",
 badgeStatusWert:"通过",
@@ -876,7 +1021,12 @@ function sprache(s){
     const t = texte[s];
 
     document.getElementById("titel").textContent = t.titel;
-    document.getElementById("anleitung").textContent = t.anleitung;
+    document.getElementById("anleitung").textContent = aktuelleAnleitung(t);
+    document.getElementById("modusMalLabel").textContent = t.modusMalLabel;
+    document.getElementById("modusGeteiltLabel").textContent = t.modusGeteiltLabel;
+    document.getElementById("modusPlusLabel").textContent = t.modusPlusLabel;
+    document.getElementById("modusMinusLabel").textContent = t.modusMinusLabel;
+    document.getElementById("wiederholungTitel").textContent = t.wiederholungTitel;
     document.getElementById("weiter").textContent = t.weiter;
     document.getElementById("neu").textContent = t.neu;
     document.getElementById("drucken").textContent = t.drucken;
@@ -890,7 +1040,7 @@ function sprache(s){
 
     document.getElementById("badgePunkteLabel").textContent = t.badgePunkteLabel;
     document.getElementById("badgeAufgabenLabel").textContent = t.badgeAufgabenLabel;
-    document.getElementById("badgeReihenLabel").textContent = t.badgeReihenLabel;
+    document.getElementById("badgeReihenLabel").textContent = aktuellesBereichLabel(t);
     document.getElementById("badgeZeitLabel").textContent = t.badgeZeitLabel;
     document.getElementById("badgeStatusLabel").textContent = t.badgeStatusLabel;
     document.getElementById("badgeStatus").textContent = t.badgeStatusWert;
@@ -902,6 +1052,39 @@ function sprache(s){
     aktualisiereStatus();
     aktualisiereLevelText();
     aktualisiereDatum();
+
+}
+
+function aktuelleAnleitung(t){
+
+    if(aktivModus === "geteilt") return t.anleitungGeteilt;
+    if(aktivModus === "plus") return t.anleitungPlus;
+    if(aktivModus === "minus") return t.anleitungMinus;
+    return t.anleitungMal;
+
+}
+
+function aktuellesBereichLabel(t){
+
+    return (aktivModus === "plus" || aktivModus === "minus")
+        ? t.badgeZahlenraumLabel
+        : t.badgeReihenLabel;
+
+}
+
+function modus(m){
+
+    aktivModus = m;
+
+    document.querySelectorAll(".modus-btn").forEach(function(b){ b.classList.remove("active"); });
+    const modusIds = { mal:"btnModusMal", geteilt:"btnModusGeteilt", plus:"btnModusPlus", minus:"btnModusMinus" };
+    document.getElementById(modusIds[m]).classList.add("active");
+
+    const t = texte[aktivSprache];
+    document.getElementById("anleitung").textContent = aktuelleAnleitung(t);
+    document.getElementById("badgeReihenLabel").textContent = aktuellesBereichLabel(t);
+
+    neueAufgaben();
 
 }
 
@@ -921,19 +1104,97 @@ function mische(array){
     return array;
 }
 
+function erzeugePlusAufgaben(anzahl){
+
+    const liste = [];
+    const genutzt = new Set();
+    let versuche = 0;
+
+    while(liste.length < anzahl && versuche < 20000){
+
+        versuche++;
+
+        const a = 10 + Math.floor(Math.random() * 81);
+        const maxB = 100 - a;
+        const b = 10 + Math.floor(Math.random() * (maxB - 9));
+
+        const zehnerUebergang = (a % 10) + (b % 10) >= 10;
+
+        if(!zehnerUebergang)
+            continue;
+
+        const schluessel = Math.min(a,b) + "_" + Math.max(a,b);
+
+        if(genutzt.has(schluessel))
+            continue;
+
+        genutzt.add(schluessel);
+        liste.push({ typ:"plus", x:a, y:b, ergebnis:a + b });
+
+    }
+
+    return liste;
+
+}
+
+function erzeugeMinusAufgaben(anzahl){
+
+    const liste = [];
+    const genutzt = new Set();
+    let versuche = 0;
+
+    while(liste.length < anzahl && versuche < 20000){
+
+        versuche++;
+
+        const m = 11 + Math.floor(Math.random() * 90);
+        const s = 1 + Math.floor(Math.random() * (m - 1));
+
+        const uebertragNoetig = (m % 10) < (s % 10);
+
+        if(!uebertragNoetig)
+            continue;
+
+        const schluessel = m + "_" + s;
+
+        if(genutzt.has(schluessel))
+            continue;
+
+        genutzt.add(schluessel);
+        liste.push({ typ:"minus", x:m, y:s, ergebnis:m - s });
+
+    }
+
+    return liste;
+
+}
+
 function neueAufgaben(){
 
     clearInterval(timerInterval);
 
-    aufgaben = [];
+    if(aktivModus === "plus"){
 
-    for(let reihe = 1; reihe <= 10; reihe++){
+        aufgaben = erzeugePlusAufgaben(45);
 
-        const faktoren = mische([1,2,3,4,5,6,7,8,9,10]).slice(0,4);
+    } else if(aktivModus === "minus"){
 
-        faktoren.forEach(function(f){
-            aufgaben.push({ a:reihe, b:f });
-        });
+        aufgaben = erzeugeMinusAufgaben(45);
+
+    } else {
+
+        aufgaben = [];
+
+        for(let a = 2; a <= 10; a++){
+            for(let b = a; b <= 10; b++){
+
+                if(aktivModus === "geteilt")
+                    aufgaben.push({ typ:"geteilt", x:a * b, y:b, ergebnis:a });
+                else
+                    aufgaben.push({ typ:"mal", x:a, y:b, ergebnis:a * b });
+
+            }
+        }
 
     }
 
@@ -941,12 +1202,15 @@ function neueAufgaben(){
 
     aktuellerIndex = 0;
     richtigCount = 0;
+    falscheAufgaben = [];
+    GESAMTZEIT = (aktivModus === "plus" || aktivModus === "minus") ? GESAMTZEIT_PLUSMINUS : GESAMTZEIT_NORMAL;
     timerSekunden = GESAMTZEIT;
     testAktiv = true;
 
     document.getElementById("diplomAussenBereich").style.display = "none";
     document.getElementById("ergebnisMsg").textContent = "";
     document.getElementById("ergebnisMsg").className = "";
+    document.getElementById("wiederholungBereich").style.display = "none";
     document.getElementById("aufgabeBereich").style.display = "block";
     document.getElementById("weiter").disabled = false;
 
@@ -987,19 +1251,64 @@ function aktualisiereTimerAnzeige(){
 
 }
 
+const SYMBOLE = { mal:" × ", geteilt:" ÷ ", plus:" + ", minus:" − " };
+
 function renderAufgabe(){
 
     const auf = aufgaben[aktuellerIndex];
 
-    document.getElementById("aufgabeKarte").textContent = auf.a + " × " + auf.b + " = ?";
+    document.getElementById("aufgabeKarte").textContent =
+        auf.x + SYMBOLE[auf.typ] + auf.y + " = ?";
 
     const eingabe = document.getElementById("aktuelleEingabe");
     eingabe.value = "";
     eingabe.style.background = "white";
+    eingabe.style.color = "#000";
     eingabe.disabled = false;
     eingabe.focus();
 
+    document.getElementById("loesungAnzeige").textContent = "";
+
+    starteFragenTimer();
+
     aktualisiereStatus();
+
+}
+
+function starteFragenTimer(){
+
+    clearTimeout(fragenAblaufTimeout);
+    clearTimeout(fragenWarnungTimeout);
+
+    const fill = document.getElementById("fragenZeitFill");
+
+    fill.style.transition = "none";
+    fill.classList.remove("warnung");
+    fill.style.width = "100%";
+    fill.offsetHeight; // Reflow erzwingen, damit die Transition danach wieder greift
+    fill.style.transition = "width " + FRAGENZEIT + "s linear, background .3s";
+    fill.style.width = "0%";
+
+    fragenWarnungTimeout = setTimeout(function(){
+        fill.classList.add("warnung");
+    }, (FRAGENZEIT - 3) * 1000);
+
+    fragenAblaufTimeout = setTimeout(function(){
+        antwortPruefen();
+    }, FRAGENZEIT * 1000);
+
+}
+
+function stoppeFragenTimer(){
+
+    clearTimeout(fragenAblaufTimeout);
+    clearTimeout(fragenWarnungTimeout);
+
+    const fill = document.getElementById("fragenZeitFill");
+    const aktuelleBreite = getComputedStyle(fill).width;
+
+    fill.style.transition = "none";
+    fill.style.width = aktuelleBreite;
 
 }
 
@@ -1125,17 +1434,30 @@ function antwortPruefen(){
         return;
 
     const eingabe = document.getElementById("aktuelleEingabe");
+
+    if(eingabe.disabled)
+        return;
+
+    stoppeFragenTimer();
+
     const auf = aufgaben[aktuellerIndex];
     const wert = parseInt(eingabe.value.trim());
 
-    const korrekt = !isNaN(wert) && wert === auf.a * auf.b;
+    const korrekt = !isNaN(wert) && wert === auf.ergebnis;
 
     if(korrekt)
         richtigCount++;
 
-    eingabe.style.background = korrekt ? "#c8e6c9" : "#ffcdd2";
+    eingabe.style.background = korrekt ? "#2e7d32" : "#c62828";
+    eingabe.style.color = "#ffffff";
     eingabe.disabled = true;
     document.getElementById("weiter").disabled = true;
+
+    if(!korrekt){
+        falscheAufgaben.push(auf);
+        document.getElementById("loesungAnzeige").textContent =
+            texte[aktivSprache].loesungLabel + " " + auf.x + SYMBOLE[auf.typ] + auf.y + " = " + auf.ergebnis;
+    }
 
     setTimeout(function(){
 
@@ -1148,7 +1470,33 @@ function antwortPruefen(){
             renderAufgabe();
         }
 
-    }, 400);
+    }, korrekt ? 400 : 2200);
+
+}
+
+function zeigeWiederholung(){
+
+    const bereich = document.getElementById("wiederholungBereich");
+    const liste = document.getElementById("wiederholungListe");
+
+    if(falscheAufgaben.length === 0){
+        bereich.style.display = "none";
+        return;
+    }
+
+    liste.innerHTML = "";
+
+    falscheAufgaben.forEach(function(auf){
+
+        const eintrag = document.createElement("span");
+        eintrag.className = "wiederholungAufgabe";
+        eintrag.textContent = auf.x + SYMBOLE[auf.typ] + auf.y + " = ?";
+
+        liste.appendChild(eintrag);
+
+    });
+
+    bereich.style.display = "block";
 
 }
 
@@ -1156,6 +1504,7 @@ function beendeTest(){
 
     testAktiv = false;
     clearInterval(timerInterval);
+    stoppeFragenTimer();
 
     document.getElementById("aufgabeBereich").style.display = "none";
     document.getElementById("weiter").disabled = true;
@@ -1181,6 +1530,8 @@ function beendeTest(){
 
     }
 
+    zeigeWiederholung();
+
 }
 
 function zeigeDiplom(){
@@ -1195,14 +1546,15 @@ function zeigeDiplom(){
         String(m).padStart(2,"0") + ":" + String(s).padStart(2,"0");
 
     document.getElementById("badgeAufgaben").textContent = richtigCount + "/" + gesamt;
-    document.getElementById("badgeReihen").textContent = "1–10";
+    document.getElementById("badgeReihen").textContent =
+        (aktivModus === "plus" || aktivModus === "minus") ? "1–100" : "2–10";
 
     const punkte = Math.max(0, 1000 - benutzteSekunden) + richtigCount * 5;
     document.getElementById("badgePunkte").textContent = punkte;
 
-    if(benutzteSekunden <= 240)
+    if(benutzteSekunden <= GESAMTZEIT * 4/7)
         aktuellesLevel = "gold";
-    else if(benutzteSekunden <= 360)
+    else if(benutzteSekunden <= GESAMTZEIT * 6/7)
         aktuellesLevel = "silber";
     else
         aktuellesLevel = "bronze";
@@ -1221,6 +1573,7 @@ function zeigeDiplom(){
 function zeitAbgelaufenFn(){
 
     testAktiv = false;
+    stoppeFragenTimer();
 
     document.getElementById("aktuelleEingabe").disabled = true;
     document.getElementById("weiter").disabled = true;
@@ -1231,6 +1584,8 @@ function zeitAbgelaufenFn(){
 
     msg.textContent = texte[aktivSprache].zeitAbgelaufen(richtigCount, gesamt);
     msg.className = "schlecht";
+
+    zeigeWiederholung();
 
 }
 
