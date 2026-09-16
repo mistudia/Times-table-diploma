@@ -212,13 +212,20 @@ background:#1976d2;
 transition:width .3s;
 }
 
+.fragenZeitZeile{
+display:flex;
+align-items:center;
+gap:10px;
+margin-bottom:26px;
+}
+
 .fragenZeitBar{
+flex:1;
 width:100%;
 height:10px;
 background:#e3ecfb;
 border-radius:6px;
 overflow:hidden;
-margin-bottom:26px;
 }
 
 #fragenZeitFill{
@@ -230,6 +237,19 @@ transition:width 1s linear, background .3s;
 
 #fragenZeitFill.warnung{
 background:#c62828;
+}
+
+#fragenZeitZahl{
+font-weight:bold;
+font-size:15px;
+color:#1976d2;
+min-width:34px;
+text-align:right;
+transition:color .3s;
+}
+
+#fragenZeitZahl.warnung{
+color:#c62828;
 }
 
 #ergebnisMsg{
@@ -367,8 +387,22 @@ margin:20px 0 4px;
 .btn-weiter{background:#3367d6;}
 .btn-weiter:hover{background:#2b57b5;}
 
+.btn-pause{background:#616161;}
+.btn-pause:hover{background:#484848;}
+.btn-pause.fortsetzen{background:#2e7d32;}
+.btn-pause.fortsetzen:hover{background:#255f28;}
+
 .btn-neu{background:#f59e0b;}
 .btn-neu:hover{background:#d88906;}
+
+#pauseHinweis{
+text-align:center;
+color:#c62828;
+font-size:14px;
+font-weight:bold;
+margin-top:10px;
+min-height:18px;
+}
 
 /* ------------------------------
    Zertifikat
@@ -719,7 +753,10 @@ pointer-events:none;
 </div>
 
 <div class="progressBar"><div id="progressFill"></div></div>
-<div class="fragenZeitBar"><div id="fragenZeitFill"></div></div>
+<div class="fragenZeitZeile">
+    <div class="fragenZeitBar"><div id="fragenZeitFill"></div></div>
+    <span id="fragenZeitZahl">7s</span>
+</div>
 
 <div id="ergebnisMsg"></div>
 
@@ -739,8 +776,11 @@ pointer-events:none;
 
 <div class="toolbar toolbar-aktionen">
 <button id="weiter" class="btn-weiter">Weiter ➜</button>
+<button id="pauseBtn" class="btn-pause">⏸️ Pause</button>
 <button id="neu" class="btn-neu">🔄 Neu starten</button>
 </div>
+
+<div id="pauseHinweis"></div>
 
 <div id="diplomAussenBereich">
 
@@ -875,11 +915,13 @@ mistudia.com
 <script>
 document.getElementById("jahr").textContent = new Date().getFullYear();
 
-const GESAMTZEIT_NORMAL = 7 * 60;
-const GESAMTZEIT_PLUSMINUS = 15 * 60;
-const FRAGENZEIT = 7;
+const GESAMTZEIT_NORMAL = 5 * 60;
+const GESAMTZEIT_PLUSMINUS = 10 * 60;
+const FRAGENZEIT_NORMAL = 7;
+const FRAGENZEIT_PLUSMINUS = 15;
 
 let GESAMTZEIT = GESAMTZEIT_NORMAL;
+let FRAGENZEIT = FRAGENZEIT_NORMAL;
 let aktivSprache = "de";
 let aktivModus = "mal";
 let aufgaben = [];
@@ -890,16 +932,19 @@ let timerSekunden = GESAMTZEIT;
 let timerInterval = null;
 let testAktiv = false;
 let fragenAblaufTimeout = null;
-let fragenWarnungTimeout = null;
+let fragenSekundenInterval = null;
+let fragenSekundenUebrig = FRAGENZEIT;
+let pausiert = false;
+let diplomGesperrt = false;
 
 const texte = {
 
 de:{
 titel:"Einmaleins-Diplom",
-anleitungMal:"Löse alle 45 Aufgaben aus den Einmaleinsreihen 2 bis 10 fehlerfrei in 7 Minuten, um dein Diplom zu bekommen!",
-anleitungGeteilt:"Löse alle 45 Geteiltaufgaben aus den Reihen 2 bis 10 fehlerfrei in 7 Minuten, um dein Diplom zu bekommen!",
-anleitungPlus:"Löse alle 45 (schweren) Plusaufgaben mit Zehnerübergang im Zahlenraum bis 100 fehlerfrei in 15 Minuten, um dein Diplom zu bekommen!",
-anleitungMinus:"Löse alle 45 (schweren) Minusaufgaben mit Übertrag im Zahlenraum bis 100 fehlerfrei in 15 Minuten, um dein Diplom zu bekommen!",
+anleitungMal:"Löse alle 45 Aufgaben aus den Einmaleinsreihen 2 bis 10 fehlerfrei in 5 Minuten, um dein Diplom zu bekommen!",
+anleitungGeteilt:"Löse alle 45 Geteiltaufgaben aus den Reihen 2 bis 10 fehlerfrei in 5 Minuten, um dein Diplom zu bekommen!",
+anleitungPlus:"Löse alle 45 (schweren) Plusaufgaben mit Zehnerübergang im Zahlenraum bis 100 fehlerfrei in 10 Minuten, um dein Diplom zu bekommen!",
+anleitungMinus:"Löse alle 45 (schweren) Minusaufgaben mit Übertrag im Zahlenraum bis 100 fehlerfrei in 10 Minuten, um dein Diplom zu bekommen!",
 modusMalLabel:"Malnehmen",
 modusGeteiltLabel:"Geteilt",
 modusPlusLabel:"Plus",
@@ -924,6 +969,10 @@ badgeZahlenraumLabel:"Zahlenraum",
 loesungLabel:"Richtige Lösung:",
 wiederholungTitel:"Diese Aufgaben hattest du falsch:",
 mikroTitel:"Antwort sprechen",
+pauseLabel:"Pause",
+fortsetzenLabel:"Fortsetzen",
+pauseHinweisText:"Bei einer Pause gibt es für diesen Versuch kein Diplom.",
+diplomGesperrtNachricht:"Super, alles richtig! Da du pausiert hast, gibt es diesmal aber kein Diplom.",
 sprachCode:"de-DE",
 badgeZeitLabel:"Benötigte Zeit",
 badgeStatusLabel:"Ergebnis",
@@ -939,10 +988,10 @@ datumLabel:""
 
 en:{
 titel:"Times Tables Diploma",
-anleitungMal:"Solve all 45 tasks from the times tables 2 to 10 without mistakes in 7 minutes to earn your diploma!",
-anleitungGeteilt:"Solve all 45 division tasks from the times tables 2 to 10 without mistakes in 7 minutes to earn your diploma!",
-anleitungPlus:"Solve all 45 (hard) addition tasks with carrying up to 100 without mistakes in 15 minutes to earn your diploma!",
-anleitungMinus:"Solve all 45 (hard) subtraction tasks with borrowing up to 100 without mistakes in 15 minutes to earn your diploma!",
+anleitungMal:"Solve all 45 tasks from the times tables 2 to 10 without mistakes in 5 minutes to earn your diploma!",
+anleitungGeteilt:"Solve all 45 division tasks from the times tables 2 to 10 without mistakes in 5 minutes to earn your diploma!",
+anleitungPlus:"Solve all 45 (hard) addition tasks with carrying up to 100 without mistakes in 10 minutes to earn your diploma!",
+anleitungMinus:"Solve all 45 (hard) subtraction tasks with borrowing up to 100 without mistakes in 10 minutes to earn your diploma!",
 modusMalLabel:"Multiply",
 modusGeteiltLabel:"Divide",
 modusPlusLabel:"Add",
@@ -967,6 +1016,10 @@ badgeZahlenraumLabel:"Number range",
 loesungLabel:"Correct answer:",
 wiederholungTitel:"Tasks you got wrong:",
 mikroTitel:"Speak your answer",
+pauseLabel:"Pause",
+fortsetzenLabel:"Resume",
+pauseHinweisText:"If you pause, there's no diploma for this attempt.",
+diplomGesperrtNachricht:"Great, all correct! But since you paused, there's no diploma this time.",
 sprachCode:"en-US",
 badgeZeitLabel:"Time taken",
 badgeStatusLabel:"Result",
@@ -982,10 +1035,10 @@ datumLabel:""
 
 es:{
 titel:"Diploma de las Tablas de Multiplicar",
-anleitungMal:"¡Resuelve las 45 tareas de las tablas del 2 al 10 sin errores en 7 minutos para obtener tu diploma!",
-anleitungGeteilt:"¡Resuelve las 45 tareas de división de las tablas del 2 al 10 sin errores en 7 minutos para obtener tu diploma!",
-anleitungPlus:"¡Resuelve las 45 tareas (difíciles) de suma con acarreo hasta 100 sin errores en 15 minutos para obtener tu diploma!",
-anleitungMinus:"¡Resuelve las 45 tareas (difíciles) de resta con préstamo hasta 100 sin errores en 15 minutos para obtener tu diploma!",
+anleitungMal:"¡Resuelve las 45 tareas de las tablas del 2 al 10 sin errores en 5 minutos para obtener tu diploma!",
+anleitungGeteilt:"¡Resuelve las 45 tareas de división de las tablas del 2 al 10 sin errores en 5 minutos para obtener tu diploma!",
+anleitungPlus:"¡Resuelve las 45 tareas (difíciles) de suma con acarreo hasta 100 sin errores en 10 minutos para obtener tu diploma!",
+anleitungMinus:"¡Resuelve las 45 tareas (difíciles) de resta con préstamo hasta 100 sin errores en 10 minutos para obtener tu diploma!",
 modusMalLabel:"Multiplicar",
 modusGeteiltLabel:"Dividir",
 modusPlusLabel:"Sumar",
@@ -1010,6 +1063,10 @@ badgeZahlenraumLabel:"Rango numérico",
 loesungLabel:"Respuesta correcta:",
 wiederholungTitel:"Tareas que tuviste mal:",
 mikroTitel:"Di tu respuesta",
+pauseLabel:"Pausa",
+fortsetzenLabel:"Continuar",
+pauseHinweisText:"Si pausas, no podrás obtener el diploma en este intento.",
+diplomGesperrtNachricht:"¡Genial, todo correcto! Pero como pausaste, no hay diploma esta vez.",
 sprachCode:"es-ES",
 badgeZeitLabel:"Tiempo empleado",
 badgeStatusLabel:"Resultado",
@@ -1025,10 +1082,10 @@ datumLabel:""
 
 zh:{
 titel:"乘法表证书",
-anleitungMal:"请在7分钟内正确解答2到10乘法表的全部45道题目，即可获得证书！",
-anleitungGeteilt:"请在7分钟内正确解答2到10除法表的全部45道题目，即可获得证书！",
-anleitungPlus:"请在15分钟内正确解答100以内需要进位的全部45道（较难）加法题目，即可获得证书！",
-anleitungMinus:"请在15分钟内正确解答100以内需要借位的全部45道（较难）减法题目，即可获得证书！",
+anleitungMal:"请在5分钟内正确解答2到10乘法表的全部45道题目，即可获得证书！",
+anleitungGeteilt:"请在5分钟内正确解答2到10除法表的全部45道题目，即可获得证书！",
+anleitungPlus:"请在10分钟内正确解答100以内需要进位的全部45道（较难）加法题目，即可获得证书！",
+anleitungMinus:"请在10分钟内正确解答100以内需要借位的全部45道（较难）减法题目，即可获得证书！",
 modusMalLabel:"乘法",
 modusGeteiltLabel:"除法",
 modusPlusLabel:"加法",
@@ -1053,6 +1110,10 @@ badgeZahlenraumLabel:"数字范围",
 loesungLabel:"正确答案：",
 wiederholungTitel:"你做错的题目：",
 mikroTitel:"说出你的答案",
+pauseLabel:"暂停",
+fortsetzenLabel:"继续",
+pauseHinweisText:"暂停后，本次将无法获得证书。",
+diplomGesperrtNachricht:"太棒了，全部正确！但因为你暂停过，这次没有证书。",
 sprachCode:"zh-CN",
 badgeZeitLabel:"所用时间",
 badgeStatusLabel:"结果",
@@ -1086,6 +1147,10 @@ function sprache(s){
     document.getElementById("modusMinusLabel").textContent = t.modusMinusLabel;
     document.getElementById("wiederholungTitel").textContent = t.wiederholungTitel;
     document.getElementById("mikroBtn").title = t.mikroTitel;
+    document.getElementById("pauseBtn").textContent =
+        (pausiert ? "▶️ " + t.fortsetzenLabel : "⏸️ " + t.pauseLabel);
+    if(diplomGesperrt)
+        document.getElementById("pauseHinweis").textContent = t.pauseHinweisText;
     document.getElementById("weiter").textContent = t.weiter;
     document.getElementById("neu").textContent = t.neu;
     document.getElementById("drucken").textContent = t.drucken;
@@ -1263,8 +1328,11 @@ function neueAufgaben(){
     richtigCount = 0;
     falscheAufgaben = [];
     GESAMTZEIT = (aktivModus === "plus" || aktivModus === "minus") ? GESAMTZEIT_PLUSMINUS : GESAMTZEIT_NORMAL;
+    FRAGENZEIT = (aktivModus === "plus" || aktivModus === "minus") ? FRAGENZEIT_PLUSMINUS : FRAGENZEIT_NORMAL;
     timerSekunden = GESAMTZEIT;
     testAktiv = true;
+    pausiert = false;
+    diplomGesperrt = false;
 
     document.getElementById("diplomAussenBereich").style.display = "none";
     document.getElementById("ergebnisMsg").textContent = "";
@@ -1272,6 +1340,10 @@ function neueAufgaben(){
     document.getElementById("wiederholungBereich").style.display = "none";
     document.getElementById("aufgabeBereich").style.display = "block";
     document.getElementById("weiter").disabled = false;
+    document.getElementById("pauseBtn").disabled = false;
+    document.getElementById("pauseBtn").classList.remove("fortsetzen");
+    document.getElementById("pauseBtn").textContent = "⏸️ " + texte[aktivSprache].pauseLabel;
+    document.getElementById("pauseHinweis").textContent = "";
 
     aktualisiereTimerAnzeige();
     renderAufgabe();
@@ -1345,38 +1417,84 @@ function renderAufgabe(){
 
 function starteFragenTimer(){
 
-    clearTimeout(fragenAblaufTimeout);
-    clearTimeout(fragenWarnungTimeout);
+    fragenSekundenUebrig = FRAGENZEIT;
 
     const fill = document.getElementById("fragenZeitFill");
-
     fill.style.transition = "none";
     fill.classList.remove("warnung");
     fill.style.width = "100%";
     fill.offsetHeight; // Reflow erzwingen, damit die Transition danach wieder greift
-    fill.style.transition = "width " + FRAGENZEIT + "s linear, background .3s";
+
+    planeFragenAblauf(fragenSekundenUebrig);
+
+}
+
+function planeFragenAblauf(sekunden){
+
+    clearTimeout(fragenAblaufTimeout);
+    clearInterval(fragenSekundenInterval);
+
+    const fill = document.getElementById("fragenZeitFill");
+    const zahl = document.getElementById("fragenZeitZahl");
+
+    fill.style.transition = "width " + sekunden + "s linear, background .3s";
     fill.style.width = "0%";
 
-    fragenWarnungTimeout = setTimeout(function(){
+    zahl.textContent = fragenSekundenUebrig + "s";
+
+    if(fragenSekundenUebrig <= 3){
         fill.classList.add("warnung");
-    }, (FRAGENZEIT - 3) * 1000);
+        zahl.classList.add("warnung");
+    } else {
+        fill.classList.remove("warnung");
+        zahl.classList.remove("warnung");
+    }
+
+    fragenSekundenInterval = setInterval(function(){
+
+        fragenSekundenUebrig--;
+        zahl.textContent = Math.max(fragenSekundenUebrig, 0) + "s";
+
+        if(fragenSekundenUebrig <= 3){
+            fill.classList.add("warnung");
+            zahl.classList.add("warnung");
+        }
+
+        if(fragenSekundenUebrig <= 0)
+            clearInterval(fragenSekundenInterval);
+
+    }, 1000);
 
     fragenAblaufTimeout = setTimeout(function(){
         antwortPruefen();
-    }, FRAGENZEIT * 1000);
+    }, sekunden * 1000);
 
 }
 
 function stoppeFragenTimer(){
 
     clearTimeout(fragenAblaufTimeout);
-    clearTimeout(fragenWarnungTimeout);
+    clearInterval(fragenSekundenInterval);
 
     const fill = document.getElementById("fragenZeitFill");
     const aktuelleBreite = getComputedStyle(fill).width;
 
     fill.style.transition = "none";
     fill.style.width = aktuelleBreite;
+
+}
+
+function fortsetzeFragenTimer(){
+
+    if(fragenSekundenUebrig <= 0){
+        antwortPruefen();
+        return;
+    }
+
+    const fill = document.getElementById("fragenZeitFill");
+    fill.offsetHeight; // Reflow, damit die eingefrorene Breite als Startpunkt übernommen wird
+
+    planeFragenAblauf(fragenSekundenUebrig);
 
 }
 
@@ -1498,7 +1616,7 @@ function jubel(){
 
 function antwortPruefen(){
 
-    if(!testAktiv)
+    if(!testAktiv || pausiert)
         return;
 
     const eingabe = document.getElementById("aktuelleEingabe");
@@ -1579,13 +1697,14 @@ function beendeTest(){
 
     document.getElementById("aufgabeBereich").style.display = "none";
     document.getElementById("weiter").disabled = true;
+    document.getElementById("pauseBtn").disabled = true;
 
     aktualisiereStatus();
 
     const gesamt = aufgaben.length;
     const msg = document.getElementById("ergebnisMsg");
 
-    if(richtigCount === gesamt){
+    if(richtigCount === gesamt && !diplomGesperrt){
 
         msg.textContent = texte[aktivSprache].alleRichtig;
         msg.className = "gut";
@@ -1593,6 +1712,11 @@ function beendeTest(){
         zeigeDiplom();
 
         jubel();
+
+    } else if(richtigCount === gesamt && diplomGesperrt){
+
+        msg.textContent = texte[aktivSprache].diplomGesperrtNachricht;
+        msg.className = "schlecht";
 
     } else {
 
@@ -1648,6 +1772,7 @@ function zeitAbgelaufenFn(){
 
     document.getElementById("aktuelleEingabe").disabled = true;
     document.getElementById("weiter").disabled = true;
+    document.getElementById("pauseBtn").disabled = true;
     document.getElementById("aufgabeBereich").style.display = "none";
 
     const gesamt = aufgaben.length;
@@ -1851,7 +1976,7 @@ function transkriptZuZahl(transkript, sprache){
 
 function starteZuhoeren(){
 
-    if(!SpeechRecognitionAPI || !sprachmodusAktiv || hoertGeradeZu || !testAktiv)
+    if(!SpeechRecognitionAPI || !sprachmodusAktiv || hoertGeradeZu || !testAktiv || pausiert)
         return;
 
     const erkennung = new SpeechRecognitionAPI();
@@ -1899,10 +2024,10 @@ function starteZuhoeren(){
 
         const eingabe = document.getElementById("aktuelleEingabe");
 
-        if(sprachmodusAktiv && testAktiv && eingabe && !eingabe.disabled){
+        if(sprachmodusAktiv && testAktiv && !pausiert && eingabe && !eingabe.disabled){
             // kleine Pause vor dem Neustart, damit der Browser die Erkennung nicht drosselt
             setTimeout(function(){
-                if(sprachmodusAktiv && testAktiv && !hoertGeradeZu){
+                if(sprachmodusAktiv && testAktiv && !pausiert && !hoertGeradeZu){
                     const eingabeJetzt = document.getElementById("aktuelleEingabe");
                     if(eingabeJetzt && !eingabeJetzt.disabled)
                         starteZuhoeren();
@@ -1920,7 +2045,7 @@ function starteZuhoeren(){
     }catch(e){
         // Start ist eventuell noch zu früh nach vorherigem Abbruch -> kurz später erneut versuchen
         setTimeout(function(){
-            if(!hoertGeradeZu && sprachmodusAktiv && testAktiv){
+            if(!hoertGeradeZu && sprachmodusAktiv && testAktiv && !pausiert){
                 const eingabeJetzt = document.getElementById("aktuelleEingabe");
                 if(eingabeJetzt && !eingabeJetzt.disabled)
                     starteZuhoeren();
@@ -1929,6 +2054,62 @@ function starteZuhoeren(){
     }
 
 }
+
+function pausieren(){
+
+    if(!testAktiv || pausiert)
+        return;
+
+    pausiert = true;
+    diplomGesperrt = true;
+
+    clearInterval(timerInterval);
+    stoppeFragenTimer();
+
+    if(SpeechRecognitionAPI)
+        stoppeZuhoeren();
+
+    document.getElementById("aktuelleEingabe").disabled = true;
+    document.getElementById("weiter").disabled = true;
+
+    const pauseBtn = document.getElementById("pauseBtn");
+    pauseBtn.textContent = "▶️ " + texte[aktivSprache].fortsetzenLabel;
+    pauseBtn.classList.add("fortsetzen");
+
+    document.getElementById("pauseHinweis").textContent = texte[aktivSprache].pauseHinweisText;
+
+}
+
+function fortsetzen(){
+
+    if(!testAktiv || !pausiert)
+        return;
+
+    pausiert = false;
+
+    document.getElementById("aktuelleEingabe").disabled = false;
+    document.getElementById("weiter").disabled = false;
+
+    const pauseBtn = document.getElementById("pauseBtn");
+    pauseBtn.textContent = "⏸️ " + texte[aktivSprache].pauseLabel;
+    pauseBtn.classList.remove("fortsetzen");
+
+    timerInterval = setInterval(tick, 1000);
+    fortsetzeFragenTimer();
+
+    if(SpeechRecognitionAPI)
+        starteZuhoeren();
+
+    document.getElementById("aktuelleEingabe").focus();
+
+}
+
+document.getElementById("pauseBtn").onclick = function(){
+    if(pausiert)
+        fortsetzen();
+    else
+        pausieren();
+};
 
 document.getElementById("weiter").onclick = function(){
     antwortPruefen();
