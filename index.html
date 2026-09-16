@@ -1331,8 +1331,10 @@ function renderAufgabe(){
     frageId++;
 
     if(SpeechRecognitionAPI){
-        stoppeZuhoeren();
-        starteZuhoeren();
+        if(aktiveErkennung)
+            aktiveErkennung.abort();
+        else
+            starteZuhoeren();
     }
 
     starteFragenTimer();
@@ -1708,7 +1710,6 @@ function starteZuhoeren(){
     if(!SpeechRecognitionAPI || !sprachmodusAktiv || hoertGeradeZu || !testAktiv)
         return;
 
-    const zielFrageId = frageId;
     const erkennung = new SpeechRecognitionAPI();
 
     erkennung.lang = texte[aktivSprache].sprachCode;
@@ -1754,8 +1755,16 @@ function starteZuhoeren(){
 
         const eingabe = document.getElementById("aktuelleEingabe");
 
-        if(sprachmodusAktiv && testAktiv && zielFrageId === frageId && eingabe && !eingabe.disabled)
-            starteZuhoeren();
+        if(sprachmodusAktiv && testAktiv && eingabe && !eingabe.disabled){
+            // kleine Pause vor dem Neustart, damit der Browser die Erkennung nicht drosselt
+            setTimeout(function(){
+                if(sprachmodusAktiv && testAktiv && !hoertGeradeZu){
+                    const eingabeJetzt = document.getElementById("aktuelleEingabe");
+                    if(eingabeJetzt && !eingabeJetzt.disabled)
+                        starteZuhoeren();
+                }
+            }, 400);
+        }
 
     };
 
@@ -1767,9 +1776,12 @@ function starteZuhoeren(){
     }catch(e){
         // Start ist eventuell noch zu früh nach vorherigem Abbruch -> kurz später erneut versuchen
         setTimeout(function(){
-            if(!hoertGeradeZu && sprachmodusAktiv && testAktiv && frageId === zielFrageId)
-                starteZuhoeren();
-        }, 300);
+            if(!hoertGeradeZu && sprachmodusAktiv && testAktiv){
+                const eingabeJetzt = document.getElementById("aktuelleEingabe");
+                if(eingabeJetzt && !eingabeJetzt.disabled)
+                    starteZuhoeren();
+            }
+        }, 400);
     }
 
 }
