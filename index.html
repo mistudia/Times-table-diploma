@@ -1330,9 +1330,8 @@ function renderAufgabe(){
 
     frageId++;
 
-    if(spracherkennung){
-        if(hoertGeradeZu)
-            spracherkennung.abort();
+    if(SpeechRecognitionAPI){
+        stoppeZuhoeren();
         starteZuhoeren();
     }
 
@@ -1507,8 +1506,8 @@ function antwortPruefen(){
 
     stoppeFragenTimer();
 
-    if(spracherkennung && hoertGeradeZu)
-        spracherkennung.abort();
+    if(SpeechRecognitionAPI)
+        stoppeZuhoeren();
 
     const auf = aufgaben[aktuellerIndex];
     const wert = parseInt(eingabe.value.trim());
@@ -1661,11 +1660,10 @@ function zeitAbgelaufenFn(){
 
 const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
 const mikroBtn = document.getElementById("mikroBtn");
-let spracherkennung = null;
+let aktiveErkennung = null;
 let hoertGeradeZu = false;
 let sprachmodusAktiv = false;
 let frageId = 0;
-let zuhoerFrageId = null;
 
 if(!SpeechRecognitionAPI){
 
@@ -1675,12 +1673,50 @@ if(!SpeechRecognitionAPI){
 
     sprachmodusAktiv = true;
 
-    spracherkennung = new SpeechRecognitionAPI();
-    spracherkennung.continuous = false;
-    spracherkennung.interimResults = false;
-    spracherkennung.maxAlternatives = 1;
+    mikroBtn.addEventListener("click", function(){
 
-    spracherkennung.onresult = function(event){
+        sprachmodusAktiv = !sprachmodusAktiv;
+
+        if(sprachmodusAktiv){
+            mikroBtn.classList.remove("stumm");
+            mikroBtn.textContent = "🎤";
+            starteZuhoeren();
+        } else {
+            mikroBtn.classList.add("stumm");
+            mikroBtn.textContent = "🔇";
+            if(aktiveErkennung)
+                aktiveErkennung.abort();
+        }
+
+    });
+
+}
+
+function stoppeZuhoeren(){
+
+    if(aktiveErkennung){
+        aktiveErkennung.abort();
+        aktiveErkennung = null;
+    }
+
+    hoertGeradeZu = false;
+
+}
+
+function starteZuhoeren(){
+
+    if(!SpeechRecognitionAPI || !sprachmodusAktiv || hoertGeradeZu || !testAktiv)
+        return;
+
+    const zielFrageId = frageId;
+    const erkennung = new SpeechRecognitionAPI();
+
+    erkennung.lang = texte[aktivSprache].sprachCode;
+    erkennung.continuous = false;
+    erkennung.interimResults = false;
+    erkennung.maxAlternatives = 1;
+
+    erkennung.onresult = function(event){
 
         const transkript = event.results[0][0].transcript;
         const zahlenMatch = transkript.match(/\d+/);
@@ -1694,7 +1730,7 @@ if(!SpeechRecognitionAPI){
 
     };
 
-    spracherkennung.onerror = function(event){
+    erkennung.onerror = function(event){
 
         hoertGeradeZu = false;
         mikroBtn.classList.remove("aktiv");
@@ -1707,52 +1743,29 @@ if(!SpeechRecognitionAPI){
 
     };
 
-    spracherkennung.onend = function(){
+    erkennung.onend = function(){
 
         hoertGeradeZu = false;
+
+        if(aktiveErkennung === erkennung)
+            aktiveErkennung = null;
+
         mikroBtn.classList.remove("aktiv");
 
         const eingabe = document.getElementById("aktuelleEingabe");
 
-        if(sprachmodusAktiv && testAktiv && zuhoerFrageId === frageId && eingabe && !eingabe.disabled)
+        if(sprachmodusAktiv && testAktiv && zielFrageId === frageId && eingabe && !eingabe.disabled)
             starteZuhoeren();
 
     };
 
-    mikroBtn.addEventListener("click", function(){
-
-        sprachmodusAktiv = !sprachmodusAktiv;
-
-        if(sprachmodusAktiv){
-            mikroBtn.classList.remove("stumm");
-            mikroBtn.textContent = "🎤";
-            starteZuhoeren();
-        } else {
-            mikroBtn.classList.add("stumm");
-            mikroBtn.textContent = "🔇";
-            if(hoertGeradeZu)
-                spracherkennung.stop();
-        }
-
-    });
-
-}
-
-function starteZuhoeren(){
-
-    if(!spracherkennung || !sprachmodusAktiv || hoertGeradeZu || !testAktiv)
-        return;
-
-    spracherkennung.lang = texte[aktivSprache].sprachCode;
-    const zielFrageId = frageId;
-    zuhoerFrageId = zielFrageId;
-
     try{
-        spracherkennung.start();
+        erkennung.start();
+        aktiveErkennung = erkennung;
         hoertGeradeZu = true;
         mikroBtn.classList.add("aktiv");
     }catch(e){
-        // Erkennung lief eventuell gerade noch aus (z.B. nach abort()) -> kurz später erneut versuchen
+        // Start ist eventuell noch zu früh nach vorherigem Abbruch -> kurz später erneut versuchen
         setTimeout(function(){
             if(!hoertGeradeZu && sprachmodusAktiv && testAktiv && frageId === zielFrageId)
                 starteZuhoeren();
