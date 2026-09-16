@@ -274,6 +274,53 @@ border-color:#1976d2;
 box-shadow:0 0 10px rgba(25,118,210,.35);
 }
 
+.eingabeZeile{
+display:flex;
+justify-content:center;
+align-items:center;
+gap:10px;
+}
+
+.mikro-btn{
+width:52px;
+height:52px;
+border-radius:50%;
+border:3px solid #90caf9;
+background:white;
+font-size:24px;
+cursor:pointer;
+transition:.2s;
+display:flex;
+align-items:center;
+justify-content:center;
+padding:0;
+}
+
+.mikro-btn:hover{
+border-color:#1976d2;
+}
+
+.mikro-btn.aktiv{
+background:#c62828;
+border-color:#c62828;
+animation:mikroPuls 1s infinite;
+}
+
+.mikro-btn.stumm{
+opacity:.45;
+border-color:#bdbdbd;
+}
+
+@keyframes mikroPuls{
+0%{ box-shadow:0 0 0 0 rgba(198,40,40,.5); }
+70%{ box-shadow:0 0 0 12px rgba(198,40,40,0); }
+100%{ box-shadow:0 0 0 0 rgba(198,40,40,0); }
+}
+
+.mikro-btn[hidden]{
+display:none;
+}
+
 #loesungAnzeige{
 margin-top:14px;
 font-size:20px;
@@ -683,7 +730,10 @@ pointer-events:none;
 
 <div id="aufgabeBereich">
     <div class="aufgabeKarte" id="aufgabeKarte"></div>
-    <input type="text" inputmode="numeric" id="aktuelleEingabe" autocomplete="off">
+    <div class="eingabeZeile">
+        <input type="text" inputmode="numeric" id="aktuelleEingabe" autocomplete="off">
+        <button type="button" id="mikroBtn" class="mikro-btn" title="Antwort sprechen">🎤</button>
+    </div>
     <div id="loesungAnzeige"></div>
 </div>
 
@@ -873,6 +923,8 @@ badgeReihenLabel:"Einmaleinsreihen",
 badgeZahlenraumLabel:"Zahlenraum",
 loesungLabel:"Richtige Lösung:",
 wiederholungTitel:"Diese Aufgaben hattest du falsch:",
+mikroTitel:"Antwort sprechen",
+sprachCode:"de-DE",
 badgeZeitLabel:"Benötigte Zeit",
 badgeStatusLabel:"Ergebnis",
 badgeStatusWert:"Bestanden",
@@ -914,6 +966,8 @@ badgeReihenLabel:"Times tables",
 badgeZahlenraumLabel:"Number range",
 loesungLabel:"Correct answer:",
 wiederholungTitel:"Tasks you got wrong:",
+mikroTitel:"Speak your answer",
+sprachCode:"en-US",
 badgeZeitLabel:"Time taken",
 badgeStatusLabel:"Result",
 badgeStatusWert:"Passed",
@@ -955,6 +1009,8 @@ badgeReihenLabel:"Tablas de multiplicar",
 badgeZahlenraumLabel:"Rango numérico",
 loesungLabel:"Respuesta correcta:",
 wiederholungTitel:"Tareas que tuviste mal:",
+mikroTitel:"Di tu respuesta",
+sprachCode:"es-ES",
 badgeZeitLabel:"Tiempo empleado",
 badgeStatusLabel:"Resultado",
 badgeStatusWert:"Aprobado",
@@ -996,6 +1052,8 @@ badgeReihenLabel:"乘法表范围",
 badgeZahlenraumLabel:"数字范围",
 loesungLabel:"正确答案：",
 wiederholungTitel:"你做错的题目：",
+mikroTitel:"说出你的答案",
+sprachCode:"zh-CN",
 badgeZeitLabel:"所用时间",
 badgeStatusLabel:"结果",
 badgeStatusWert:"通过",
@@ -1027,6 +1085,7 @@ function sprache(s){
     document.getElementById("modusPlusLabel").textContent = t.modusPlusLabel;
     document.getElementById("modusMinusLabel").textContent = t.modusMinusLabel;
     document.getElementById("wiederholungTitel").textContent = t.wiederholungTitel;
+    document.getElementById("mikroBtn").title = t.mikroTitel;
     document.getElementById("weiter").textContent = t.weiter;
     document.getElementById("neu").textContent = t.neu;
     document.getElementById("drucken").textContent = t.drucken;
@@ -1269,6 +1328,14 @@ function renderAufgabe(){
 
     document.getElementById("loesungAnzeige").textContent = "";
 
+    frageId++;
+
+    if(spracherkennung){
+        if(hoertGeradeZu)
+            spracherkennung.abort();
+        starteZuhoeren();
+    }
+
     starteFragenTimer();
 
     aktualisiereStatus();
@@ -1440,6 +1507,9 @@ function antwortPruefen(){
 
     stoppeFragenTimer();
 
+    if(spracherkennung && hoertGeradeZu)
+        spracherkennung.abort();
+
     const auf = aufgaben[aktuellerIndex];
     const wert = parseInt(eingabe.value.trim());
 
@@ -1586,6 +1656,107 @@ function zeitAbgelaufenFn(){
     msg.className = "schlecht";
 
     zeigeWiederholung();
+
+}
+
+const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+const mikroBtn = document.getElementById("mikroBtn");
+let spracherkennung = null;
+let hoertGeradeZu = false;
+let sprachmodusAktiv = false;
+let frageId = 0;
+let zuhoerFrageId = null;
+
+if(!SpeechRecognitionAPI){
+
+    mikroBtn.hidden = true;
+
+} else {
+
+    sprachmodusAktiv = true;
+
+    spracherkennung = new SpeechRecognitionAPI();
+    spracherkennung.continuous = false;
+    spracherkennung.interimResults = false;
+    spracherkennung.maxAlternatives = 1;
+
+    spracherkennung.onresult = function(event){
+
+        const transkript = event.results[0][0].transcript;
+        const zahlenMatch = transkript.match(/\d+/);
+
+        if(zahlenMatch){
+            const eingabe = document.getElementById("aktuelleEingabe");
+            eingabe.value = zahlenMatch[0];
+            eingabe.focus();
+        }
+
+    };
+
+    spracherkennung.onerror = function(event){
+
+        hoertGeradeZu = false;
+        mikroBtn.classList.remove("aktiv");
+
+        if(event.error === "not-allowed" || event.error === "audio-capture" || event.error === "service-not-allowed"){
+            sprachmodusAktiv = false;
+            mikroBtn.classList.add("stumm");
+            mikroBtn.textContent = "🔇";
+        }
+
+    };
+
+    spracherkennung.onend = function(){
+
+        hoertGeradeZu = false;
+        mikroBtn.classList.remove("aktiv");
+
+        const eingabe = document.getElementById("aktuelleEingabe");
+
+        if(sprachmodusAktiv && testAktiv && zuhoerFrageId === frageId && eingabe && !eingabe.disabled)
+            starteZuhoeren();
+
+    };
+
+    mikroBtn.addEventListener("click", function(){
+
+        sprachmodusAktiv = !sprachmodusAktiv;
+
+        if(sprachmodusAktiv){
+            mikroBtn.classList.remove("stumm");
+            mikroBtn.textContent = "🎤";
+            starteZuhoeren();
+        } else {
+            mikroBtn.classList.add("stumm");
+            mikroBtn.textContent = "🔇";
+            if(hoertGeradeZu)
+                spracherkennung.stop();
+        }
+
+    });
+
+}
+
+function starteZuhoeren(){
+
+    if(!spracherkennung || !sprachmodusAktiv || hoertGeradeZu || !testAktiv)
+        return;
+
+    spracherkennung.lang = texte[aktivSprache].sprachCode;
+    const zielFrageId = frageId;
+    zuhoerFrageId = zielFrageId;
+
+    try{
+        spracherkennung.start();
+        hoertGeradeZu = true;
+        mikroBtn.classList.add("aktiv");
+    }catch(e){
+        // Erkennung lief eventuell gerade noch aus (z.B. nach abort()) -> kurz später erneut versuchen
+        setTimeout(function(){
+            if(!hoertGeradeZu && sprachmodusAktiv && testAktiv && frageId === zielFrageId)
+                starteZuhoeren();
+        }, 300);
+    }
 
 }
 
