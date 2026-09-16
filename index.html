@@ -1705,6 +1705,150 @@ function stoppeZuhoeren(){
 
 }
 
+function deWortZuZahl(text){
+
+    text = text.toLowerCase()
+        .replace(/ß/g, "ss")
+        .replace(/ü/g, "ue")
+        .replace(/ö/g, "oe")
+        .replace(/ä/g, "ae")
+        .replace(/\s+/g, "");
+
+    const einer = { "null":0,"eins":1,"ein":1,"zwei":2,"zwo":2,"drei":3,"vier":4,"fuenf":5,"sechs":6,"sieben":7,"acht":8,"neun":9 };
+    const teen = { "zehn":10,"elf":11,"zwoelf":12,"dreizehn":13,"vierzehn":14,"fuenfzehn":15,"sechzehn":16,"siebzehn":17,"achtzehn":18,"neunzehn":19 };
+    const zehner = { "zwanzig":20,"dreissig":30,"vierzig":40,"fuenfzig":50,"sechzig":60,"siebzig":70,"achtzig":80,"neunzig":90 };
+
+    if(text === "hundert" || text === "einhundert")
+        return 100;
+
+    if(einer.hasOwnProperty(text)) return einer[text];
+    if(teen.hasOwnProperty(text)) return teen[text];
+    if(zehner.hasOwnProperty(text)) return zehner[text];
+
+    for(const wort in zehner){
+        if(text.endsWith(wort)){
+            const rest = text.slice(0, text.length - wort.length);
+            if(rest.endsWith("und")){
+                const einerWort = rest.slice(0, rest.length - 3);
+                if(einerWort === "ein") return zehner[wort] + 1;
+                if(einer.hasOwnProperty(einerWort)) return zehner[wort] + einer[einerWort];
+            }
+        }
+    }
+
+    return null;
+
+}
+
+function enWortZuZahl(text){
+
+    const ones = { "zero":0,"one":1,"two":2,"three":3,"four":4,"five":5,"six":6,"seven":7,"eight":8,"nine":9 };
+    const teens = { "ten":10,"eleven":11,"twelve":12,"thirteen":13,"fourteen":14,"fifteen":15,"sixteen":16,"seventeen":17,"eighteen":18,"nineteen":19 };
+    const tens = { "twenty":20,"thirty":30,"forty":40,"fifty":50,"sixty":60,"seventy":70,"eighty":80,"ninety":90 };
+
+    const words = text.toLowerCase().split(/\s+/).filter(function(w){ return w && w !== "and"; });
+
+    if(words.length === 1){
+        const w = words[0];
+        if(w === "hundred") return 100;
+        if(ones.hasOwnProperty(w)) return ones[w];
+        if(teens.hasOwnProperty(w)) return teens[w];
+        if(tens.hasOwnProperty(w)) return tens[w];
+        return null;
+    }
+
+    if(words.length === 2){
+        if(words[0] === "one" && words[1] === "hundred") return 100;
+        if(tens.hasOwnProperty(words[0]) && ones.hasOwnProperty(words[1]))
+            return tens[words[0]] + ones[words[1]];
+    }
+
+    return null;
+
+}
+
+function esWortZuZahl(text){
+
+    const zahlen = {
+        "cero":0,"uno":1,"un":1,"dos":2,"tres":3,"cuatro":4,"cinco":5,"seis":6,"siete":7,"ocho":8,"nueve":9,
+        "diez":10,"once":11,"doce":12,"trece":13,"catorce":14,"quince":15,
+        "dieciseis":16,"diecisiete":17,"dieciocho":18,"diecinueve":19,
+        "veinte":20,"veintiuno":21,"veintidos":22,"veintitres":23,"veinticuatro":24,"veinticinco":25,
+        "veintiseis":26,"veintisiete":27,"veintiocho":28,"veintinueve":29,
+        "treinta":30,"cuarenta":40,"cincuenta":50,"sesenta":60,"setenta":70,"ochenta":80,"noventa":90,
+        "cien":100,"ciento":100
+    };
+
+    const normalizado = text.toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // Akzente entfernen (á->a usw.)
+
+    if(zahlen.hasOwnProperty(normalizado))
+        return zahlen[normalizado];
+
+    const match = normalizado.match(/^(treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa) y (uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve)$/);
+
+    if(match)
+        return zahlen[match[1]] + zahlen[match[2]];
+
+    return null;
+
+}
+
+function zhWortZuZahl(text){
+
+    const ziffern = { "零":0,"一":1,"二":2,"两":2,"三":3,"四":4,"五":5,"六":6,"七":7,"八":8,"九":9 };
+
+    text = text.trim();
+
+    if(text === "十") return 10;
+    if(text === "百" || text === "一百") return 100;
+
+    if(ziffern.hasOwnProperty(text))
+        return ziffern[text];
+
+    if(text.indexOf("十") !== -1){
+
+        const teile = text.split("十");
+        const vorne = teile[0];
+        const hinten = teile[1] || "";
+
+        let zehner = 1;
+        if(vorne !== ""){
+            if(!ziffern.hasOwnProperty(vorne)) return null;
+            zehner = ziffern[vorne];
+        }
+
+        let einer = 0;
+        if(hinten !== ""){
+            if(!ziffern.hasOwnProperty(hinten)) return null;
+            einer = ziffern[hinten];
+        }
+
+        return zehner * 10 + einer;
+
+    }
+
+    return null;
+
+}
+
+function transkriptZuZahl(transkript, sprache){
+
+    const bereinigt = transkript.trim();
+    const digitMatch = bereinigt.match(/\d+/);
+
+    if(digitMatch)
+        return parseInt(digitMatch[0], 10);
+
+    if(sprache === "de") return deWortZuZahl(bereinigt);
+    if(sprache === "en") return enWortZuZahl(bereinigt);
+    if(sprache === "es") return esWortZuZahl(bereinigt);
+    if(sprache === "zh") return zhWortZuZahl(bereinigt);
+
+    return null;
+
+}
+
 function starteZuhoeren(){
 
     if(!SpeechRecognitionAPI || !sprachmodusAktiv || hoertGeradeZu || !testAktiv)
@@ -1720,11 +1864,11 @@ function starteZuhoeren(){
     erkennung.onresult = function(event){
 
         const transkript = event.results[0][0].transcript;
-        const zahlenMatch = transkript.match(/\d+/);
+        const zahl = transkriptZuZahl(transkript, aktivSprache);
 
-        if(zahlenMatch){
+        if(zahl !== null && !isNaN(zahl)){
             const eingabe = document.getElementById("aktuelleEingabe");
-            eingabe.value = zahlenMatch[0];
+            eingabe.value = zahl;
             eingabe.focus();
             antwortPruefen();
         }
