@@ -196,6 +196,20 @@ color:#c62828;
 background:#ffebee;
 }
 
+#fehlerAnzeige{
+font-size:14px;
+color:#c62828;
+background:#ffebee;
+padding:6px 12px;
+border-radius:10px;
+white-space:nowrap;
+}
+
+#fehlerAnzeige.keineFehler{
+color:#2e7d32;
+background:#e8f5e9;
+}
+
 .progressBar{
 width:100%;
 height:10px;
@@ -749,6 +763,7 @@ pointer-events:none;
 
 <div class="statusZeile">
 <span id="aufgabeLabel"></span>
+<span id="fehlerAnzeige"></span>
 <span id="timerAnzeige">08:00</span>
 </div>
 
@@ -769,7 +784,7 @@ pointer-events:none;
     <div class="aufgabeKarte" id="aufgabeKarte"></div>
     <div class="eingabeZeile">
         <input type="text" inputmode="numeric" id="aktuelleEingabe" autocomplete="off">
-        <button type="button" id="mikroBtn" class="mikro-btn" title="Antwort sprechen">🎤</button>
+        <button type="button" id="mikroBtn" class="mikro-btn stumm" title="Antwort sprechen">🔇</button>
     </div>
     <div id="loesungAnzeige"></div>
 </div>
@@ -936,6 +951,8 @@ let fragenSekundenInterval = null;
 let fragenSekundenUebrig = FRAGENZEIT;
 let pausiert = false;
 let diplomGesperrt = false;
+let renderZeitpunkt = 0;
+const MIN_ANTWORT_VERZOEGERUNG = 300;
 
 const texte = {
 
@@ -973,6 +990,7 @@ pauseLabel:"Pause",
 fortsetzenLabel:"Fortsetzen",
 pauseHinweisText:"Bei einer Pause gibt es für diesen Versuch kein Diplom.",
 diplomGesperrtNachricht:"Super, alles richtig! Da du pausiert hast, gibt es diesmal aber kein Diplom.",
+fehlerLabel:function(n){ return n === 0 ? "Bisher keine Fehler" : "Fehler bisher: " + n; },
 sprachCode:"de-DE",
 badgeZeitLabel:"Benötigte Zeit",
 badgeStatusLabel:"Ergebnis",
@@ -1020,6 +1038,7 @@ pauseLabel:"Pause",
 fortsetzenLabel:"Resume",
 pauseHinweisText:"If you pause, there's no diploma for this attempt.",
 diplomGesperrtNachricht:"Great, all correct! But since you paused, there's no diploma this time.",
+fehlerLabel:function(n){ return n === 0 ? "No mistakes yet" : "Mistakes so far: " + n; },
 sprachCode:"en-US",
 badgeZeitLabel:"Time taken",
 badgeStatusLabel:"Result",
@@ -1067,6 +1086,7 @@ pauseLabel:"Pausa",
 fortsetzenLabel:"Continuar",
 pauseHinweisText:"Si pausas, no podrás obtener el diploma en este intento.",
 diplomGesperrtNachricht:"¡Genial, todo correcto! Pero como pausaste, no hay diploma esta vez.",
+fehlerLabel:function(n){ return n === 0 ? "Sin errores por ahora" : "Errores hasta ahora: " + n; },
 sprachCode:"es-ES",
 badgeZeitLabel:"Tiempo empleado",
 badgeStatusLabel:"Resultado",
@@ -1114,6 +1134,7 @@ pauseLabel:"暂停",
 fortsetzenLabel:"继续",
 pauseHinweisText:"暂停后，本次将无法获得证书。",
 diplomGesperrtNachricht:"太棒了，全部正确！但因为你暂停过，这次没有证书。",
+fehlerLabel:function(n){ return n === 0 ? "目前没有错误" : "目前错误：" + n; },
 sprachCode:"zh-CN",
 badgeZeitLabel:"所用时间",
 badgeStatusLabel:"结果",
@@ -1401,6 +1422,7 @@ function renderAufgabe(){
     document.getElementById("loesungAnzeige").textContent = "";
 
     frageId++;
+    renderZeitpunkt = Date.now();
 
     if(SpeechRecognitionAPI){
         if(aktiveErkennung)
@@ -1498,10 +1520,20 @@ function fortsetzeFragenTimer(){
 
 }
 
+function aktualisiereFehlerAnzeige(){
+
+    const anzeige = document.getElementById("fehlerAnzeige");
+    anzeige.textContent = texte[aktivSprache].fehlerLabel(falscheAufgaben.length);
+    anzeige.classList.toggle("keineFehler", falscheAufgaben.length === 0);
+
+}
+
 function aktualisiereStatus(){
 
     document.getElementById("aufgabeLabel").textContent =
         texte[aktivSprache].aufgabeLabel(Math.min(aktuellerIndex + 1, aufgaben.length), aufgaben.length);
+
+    aktualisiereFehlerAnzeige();
 
     const prozent = aufgaben.length ? (aktuellerIndex / aufgaben.length) * 100 : 0;
     document.getElementById("progressFill").style.width = prozent + "%";
@@ -1619,6 +1651,9 @@ function antwortPruefen(){
     if(!testAktiv || pausiert)
         return;
 
+    if(Date.now() - renderZeitpunkt < MIN_ANTWORT_VERZOEGERUNG)
+        return;
+
     const eingabe = document.getElementById("aktuelleEingabe");
 
     if(eingabe.disabled)
@@ -1646,6 +1681,7 @@ function antwortPruefen(){
         falscheAufgaben.push(auf);
         document.getElementById("loesungAnzeige").textContent =
             texte[aktivSprache].loesungLabel + " " + auf.x + SYMBOLE[auf.typ] + auf.y + " = " + auf.ergebnis;
+        aktualisiereFehlerAnzeige();
     }
 
     setTimeout(function(){
@@ -1798,7 +1834,9 @@ if(!SpeechRecognitionAPI){
 
 } else {
 
-    sprachmodusAktiv = true;
+    sprachmodusAktiv = false;
+    mikroBtn.classList.add("stumm");
+    mikroBtn.textContent = "🔇";
 
     mikroBtn.addEventListener("click", function(){
 
@@ -2118,7 +2156,8 @@ document.getElementById("weiter").onclick = function(){
 document.getElementById("aktuelleEingabe").addEventListener("keydown", function(e){
     if(e.key === "Enter"){
         e.preventDefault();
-        antwortPruefen();
+        if(!e.repeat)
+            antwortPruefen();
     }
 });
 
