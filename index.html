@@ -115,7 +115,8 @@ font-weight:900;
 main{
 background:white;
 margin-top:25px;
-padding:30px;
+margin-bottom:0;
+padding:30px 30px 6px;
 border-radius:18px;
 box-shadow:0 8px 20px rgba(0,0,0,.12);
 }
@@ -143,9 +144,9 @@ transition:.25s;
 #logoUnten:hover{transform:scale(1.03);}
 
 footer{
-margin-top:40px;
+margin-top:0;
 text-align:center;
-padding:25px;
+padding:8px 25px;
 color:#666;
 font-size:15px;
 border-top:1px solid #ddd;
@@ -395,7 +396,7 @@ display:flex;
 justify-content:center;
 gap:14px;
 flex-wrap:wrap;
-margin:20px 0 4px;
+margin:20px 0 0;
 }
 
 .btn-weiter{background:#3367d6;}
@@ -977,7 +978,10 @@ diplomTitel:"ZERTIFIKAT",
 diplomText1:"Hiermit wird bestätigt, dass",
 diplomText2Vor:"erfolgreich am",
 diplomText2Marke:"miStudia",
-diplomText2Nach:"Einmaleins-Diplom teilgenommen hat.",
+diplomText2NachMal:"Einmaleins-Diplom teilgenommen hat.",
+diplomText2NachGeteilt:"Geteilt-Diplom teilgenommen hat.",
+diplomText2NachPlus:"Plus-Diplom teilgenommen hat.",
+diplomText2NachMinus:"Minus-Diplom teilgenommen hat.",
 namePlatzhalter:"Dein Name",
 badgePunkteLabel:"Punkte",
 badgeAufgabenLabel:"Aufgaben richtig",
@@ -1025,7 +1029,10 @@ diplomTitel:"CERTIFICATE",
 diplomText1:"This certifies that",
 diplomText2Vor:"successfully took part in the",
 diplomText2Marke:"miStudia",
-diplomText2Nach:"Times Tables Diploma.",
+diplomText2NachMal:"Times Tables Diploma.",
+diplomText2NachGeteilt:"Division Diploma.",
+diplomText2NachPlus:"Addition Diploma.",
+diplomText2NachMinus:"Subtraction Diploma.",
 namePlatzhalter:"Your name",
 badgePunkteLabel:"Points",
 badgeAufgabenLabel:"Tasks correct",
@@ -1073,7 +1080,10 @@ diplomTitel:"CERTIFICADO",
 diplomText1:"Por la presente se certifica que",
 diplomText2Vor:"participó con éxito en el",
 diplomText2Marke:"miStudia",
-diplomText2Nach:"Diploma de las Tablas de Multiplicar.",
+diplomText2NachMal:"Diploma de las Tablas de Multiplicar.",
+diplomText2NachGeteilt:"Diploma de División.",
+diplomText2NachPlus:"Diploma de Suma.",
+diplomText2NachMinus:"Diploma de Resta.",
 namePlatzhalter:"Tu nombre",
 badgePunkteLabel:"Puntos",
 badgeAufgabenLabel:"Tareas correctas",
@@ -1121,7 +1131,10 @@ diplomTitel:"证书",
 diplomText1:"兹证明",
 diplomText2Vor:"成功参加了",
 diplomText2Marke:"miStudia",
-diplomText2Nach:"乘法表证书考试。",
+diplomText2NachMal:"乘法表证书。",
+diplomText2NachGeteilt:"除法表证书。",
+diplomText2NachPlus:"加法证书。",
+diplomText2NachMinus:"减法证书。",
 namePlatzhalter:"你的名字",
 badgePunkteLabel:"积分",
 badgeAufgabenLabel:"正确题数",
@@ -1181,7 +1194,7 @@ function sprache(s){
     document.getElementById("diplomNameInput").placeholder = t.namePlatzhalter;
 
     document.getElementById("diplomText2").innerHTML =
-        t.diplomText2Vor + "<br><span class=\"marke\">" + t.diplomText2Marke + "</span> " + t.diplomText2Nach;
+        t.diplomText2Vor + "<br><span class=\"marke\">" + t.diplomText2Marke + "</span> " + aktuellerDiplomText2Nach(t);
 
     document.getElementById("badgePunkteLabel").textContent = t.badgePunkteLabel;
     document.getElementById("badgeAufgabenLabel").textContent = t.badgeAufgabenLabel;
@@ -1217,6 +1230,15 @@ function aktuellesBereichLabel(t){
 
 }
 
+function aktuellerDiplomText2Nach(t){
+
+    if(aktivModus === "geteilt") return t.diplomText2NachGeteilt;
+    if(aktivModus === "plus") return t.diplomText2NachPlus;
+    if(aktivModus === "minus") return t.diplomText2NachMinus;
+    return t.diplomText2NachMal;
+
+}
+
 function modus(m){
 
     aktivModus = m;
@@ -1228,6 +1250,8 @@ function modus(m){
     const t = texte[aktivSprache];
     document.getElementById("anleitung").textContent = aktuelleAnleitung(t);
     document.getElementById("badgeReihenLabel").textContent = aktuellesBereichLabel(t);
+    document.getElementById("diplomText2").innerHTML =
+        t.diplomText2Vor + "<br><span class=\"marke\">" + t.diplomText2Marke + "</span> " + aktuellerDiplomText2Nach(t);
 
     neueAufgaben();
 
@@ -1335,8 +1359,10 @@ function neueAufgaben(){
 
                 if(aktivModus === "geteilt")
                     aufgaben.push({ typ:"geteilt", x:a * b, y:b, ergebnis:a });
-                else
+                else if(Math.random() < 0.5)
                     aufgaben.push({ typ:"mal", x:a, y:b, ergebnis:a * b });
+                else
+                    aufgaben.push({ typ:"mal", x:b, y:a, ergebnis:a * b });
 
             }
         }
